@@ -69,9 +69,10 @@ class TextCleaner:
         try:
             # Get Claude's response
             response = claude.messages.create(
-                model="claude-3-opus-20240229",
-                max_tokens=4000,  # Reduced to be within Claude-3's limits
+                model="claude-sonnet-4-5",
+                max_tokens=4000,
                 temperature=0.2,  # Lower temperature for more consistent JSON output
+                system="You are a concise technical EMR assistant analyzing patient referral documents.",
                 messages=[
                     {
                         "role": "user",
@@ -81,8 +82,27 @@ class TextCleaner:
             )
             
             # Extract and parse the JSON response
-            cleaned_data = json.loads(response.content[0].text)
+            response_text = response.content[0].text
+            
+            # Try to extract JSON if it's wrapped in markdown code blocks
+            if "```json" in response_text:
+                # Extract content between ```json and ```
+                start = response_text.find("```json") + 7
+                end = response_text.find("```", start)
+                response_text = response_text[start:end].strip()
+            elif "```" in response_text:
+                # Extract content between ``` and ```
+                start = response_text.find("```") + 3
+                end = response_text.find("```", start)
+                response_text = response_text[start:end].strip()
+            
+            # Remove any leading/trailing whitespace
+            response_text = response_text.strip()
+            
+            cleaned_data = json.loads(response_text)
             return cleaned_data
             
+        except json.JSONDecodeError as e:
+            raise Exception(f"Error parsing JSON from Claude response: {str(e)}. Response was: {response.content[0].text[:500]}")
         except Exception as e:
             raise Exception(f"Error processing text with Claude: {str(e)}")

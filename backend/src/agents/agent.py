@@ -1,68 +1,111 @@
-from langchain_anthropic import ChatAnthropic
+from browser_use.llm import ChatAnthropic
 from browser_use import Agent
 import asyncio
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Initialize the model
 class EMRFormFiller:
     def __init__(self):
         self.url = "https://v0-mock-emr-page.vercel.app/"
-    
+
     async def fill_form(self, patient_data):
         """
         Fill the EMR form with the provided patient data
-        
+
         Args:
             patient_data (Dict[str, Any]): JSON data containing patient information
         """
-        # Initialize the model
+        # Initialize the model with API key explicitly
         llm = ChatAnthropic(
-            model_name="claude-3-5-sonnet-20240620",
+            model="claude-sonnet-4-5",
+            api_key=os.getenv('ANTHROPIC_API_KEY'),
             temperature=0.0,
-            timeout=100, # Increase for complex tasks
+            timeout=100,
         )
 
         initial_actions = [
-            {'open_tab': {'url': self.url}},
+            {'navigate': {'url': self.url, 'new_tab': True}},
         ]
 
         data = patient_data["cleaned_data"]
 
+        # Build medication instructions
+        medication_instructions = ""
+        for i, med in enumerate(data['clinical_info']['medications'], 1):
+            medication_instructions += f"""
+        {i}. Click the "Add Medication" button
+        - Enter medication name: {med['name']}
+        - Enter dosage: {med['dosage']}
+        - Enter instructions: {med['instructions']}
+            """
+
         task = f"""
-        please on the opened tab click Create New Patient Intake
-        Then you are now going to use the json passed to input data into this EMR form,
-        These are going to be the field name, index, and the data to put in
+You are filling out an Electronic Medical Record (EMR) form with patient data. Follow these steps carefully:
 
-        Document Type: {data['document_type']}
+IMPORTANT: For ANY field where data is not provided or is empty, you MUST enter "N/A" - never leave fields blank.
 
-        Full Name: {data['patient_info']['name']}
-        Date of Birth: {data['patient_info']['dob']}
-        Patient ID: {data['patient_info']['id']}
+STEP 1: LOGIN TO THE SYSTEM
+- Click the "Login" button on the homepage
+- Enter username: admin
+- Enter password: password
+- Click the login/submit button to proceed
 
-        Provider Name: {data['provider_info']['name']}
-        Facility: {data['provider_info']['facility']}
-        Contact: {data['provider_info']['contact']}
+STEP 2: After successful login, click the "Create New Patient Intake" button to start a new patient intake form.
 
-        Diagnosis: {data['clinical_info']['diagnosis']}
-        
-        Context for adding Medication: Make sure to click Add Medication iteration of the loop
-        Medication Name: {[med['name'] for med in data['clinical_info']['medications']]}
-        Medication Dosage: {[med['dosage'] for med in data['clinical_info']['medications']]}
-        Medication Instructions: {[med['instructions'] for med in data['clinical_info']['medications']]}
+STEP 3: Fill in the Patient Information section:
+        - Document Type: Enter "{data['document_type']}"
+        - Full Name: Enter "{data['patient_info']['name']}"
+        - Date of Birth: Enter "{data['patient_info']['dob']}" (format: YYYY-MM-DD)
+        - Patient ID: Enter "{data['patient_info']['id']}"
 
-        Vital Sign Blood Pressure: {data['clinical_info']['vital_signs']['blood_pressure']}
-        Vital Sign Heart Rate: {data['clinical_info']['vital_signs']['heart_rate']}
-        Vital Sign Temperature: {data['clinical_info']['vital_signs']['temperature']}
+        STEP 4: Fill in the Provider Information section:
+- Provider Name: Enter "{data['provider_info']['name'] if data['provider_info']['name'] else 'N/A'}"
+- Facility: Enter "{data['provider_info']['facility'] if data['provider_info']['facility'] else 'N/A'}"
+- Contact: Enter "{data['provider_info']['contact'] if data['provider_info']['contact'] else 'N/A'}"
+
+STEP 5: Fill in the Clinical Information section:
+- Diagnosis: Enter the following diagnoses (comma-separated or as separate entries): {', '.join(data['clinical_info']['diagnosis']) if data['clinical_info']['diagnosis'] else 'N/A'}
+
+STEP 6: Add Medications (for EACH medication, click "Add Medication" button first):
+{medication_instructions if data['clinical_info']['medications'] else "If there are no medications or the medication section is empty, enter N/A or skip this section."}
+
+STEP 7: Fill in Vital Signs (if any field is empty, enter "N/A"):
+- Blood Pressure: Enter "{data['clinical_info']['vital_signs']['blood_pressure'] if data['clinical_info']['vital_signs']['blood_pressure'] else 'N/A'}"
+- Heart Rate: Enter "{data['clinical_info']['vital_signs']['heart_rate'] if data['clinical_info']['vital_signs']['heart_rate'] else 'N/A'}"
+- Temperature: Enter "{data['clinical_info']['vital_signs']['temperature'] if data['clinical_info']['vital_signs']['temperature'] else 'N/A'}"
+
+STEP 8: If there's a "Date of Service" field, enter: {data.get('date_of_service', 'N/A')}
+
+STEP 9: If there's an "Additional Notes" or "Comments" field, enter: {data.get('additional_notes', 'N/A')}
+
+STEP 10: After filling all fields, click the "Submit" or "Save" button to complete the form submission.
+
+Take your time with each field and make sure all data is entered accurately.
         """
+
         # Create agent with the model
         agent = Agent(
-            task = task,
-            initial_actions = initial_actions,
-            llm=llm
-
+            task=task,
+            initial_actions=initial_actions,
+            llm=llm,
+            max_failures=10,  # Allow more retries if actions fail
+            use_vision=True,  # Enable vision to better identify form fields
+            step_timeout=300,  # 5 minutes per step (default is 180)
+            use_thinking=True,  # Enable reasoning
+            flash_mode=False,  # Disable flash mode for more thorough execution
         )
 
-        await agent.run()
+        print(f"Starting agent to fill EMR form...")
+        result = await agent.run()
+        print(f"Agent completed. Result: {result}")
+
+        # Keep browser open longer to ensure form submission completes
         await asyncio.sleep(10)
+
+        return result
 
 
 async def main():

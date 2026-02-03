@@ -6,6 +6,9 @@ import pathlib
 BACKEND_DIR = pathlib.Path(__file__).parent.parent.parent.absolute()
 UPLOAD_DIR = os.path.join(BACKEND_DIR, "uploads")
 
+# Ensure the uploads directory exists
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 router = APIRouter(
     prefix="/upload",
     tags=["upload"]
