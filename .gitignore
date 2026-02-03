@@ -1,3 +1,40 @@
+# Uploads directory
 backend/uploads/
+
+# Dependencies
 frontend/node_modules/
+frontend_mobile/node_modules/
+
+# Environment variables - IMPORTANT: Never commit these!
+.env
+*.env
+.env.local
+.env.*.local
+backend/.env
 backend/src/.env
+
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Next.js
+.next/
+frontend/.next/
+frontend/out/
+frontend/build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
