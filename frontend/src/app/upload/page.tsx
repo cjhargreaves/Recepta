@@ -9,7 +9,7 @@ interface UploadedDocument {
   name: string;
   uploadedAt: Date;
   size: string;
-  status: 'processing' | 'completed' | 'failed';
+  status: 'processing' | 'completed' | 'analyzed' | 'failed';
 }
 
 export default function UploadPage() {
@@ -38,6 +38,8 @@ export default function UploadPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'analyzed':
+        return 'bg-green-600 text-white';
       case 'completed':
         return 'bg-green-100 text-green-800';
       case 'processing':
@@ -92,16 +94,19 @@ export default function UploadPage() {
         throw new Error(data.detail || 'Analysis failed');
       }
 
-      // Stage 4: Filling form
-      setAnalysisStage('Auto-filling EMR form...');
-      setAnalysisProgress(90);
+      // Data extracted - form filling happens in background
+      setAnalysisStage('Data extracted! EMR form filling in background...');
+      setAnalysisProgress(100);
       
-      // Small delay to show completion
-      setTimeout(() => {
-        setAnalysisProgress(100);
-        setAnalysisStage('Complete!');
-        setAnalysisResult(data);
-      }, 1000);
+      setAnalysisResult(data);
+      
+      // Update all documents to "analyzed" status
+      setDocuments(prevDocs => 
+        prevDocs.map(doc => ({
+          ...doc,
+          status: 'analyzed' as const
+        }))
+      );
     } catch (error: any) {
       console.error('Analysis error:', error);
       alert(`Analysis failed: ${error.message}`);
@@ -147,7 +152,7 @@ export default function UploadPage() {
                   <div className="flex-1">
                     <h3 className="text-lg font-bold text-gray-800 mb-2">Process Medical Documents</h3>
                     <p className="text-sm text-gray-600 mb-4">
-                      Analyze uploaded documents with OCR, extract medical information, and automatically fill the EMR form.
+                      Analyze and extract medical information to fill selected EMR form. 
                     </p>
                   </div>
                   <button
@@ -209,6 +214,15 @@ export default function UploadPage() {
                           <p className="text-xs text-gray-600 mt-1">
                             Processed {analysisResult.num_files_processed} document(s)
                           </p>
+                          {analysisResult.form_filling_status === 'running_in_background' && (
+                            <p className="text-xs text-teal-600 mt-1 flex items-center">
+                              <svg className="animate-spin h-3 w-3 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              EMR form is being filled automatically in the background (3-5 min)
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>

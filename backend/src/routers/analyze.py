@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from typing import List
 import os
 import logging
+import asyncio
 from ocr.analyze_pdf import analyze_pdf
 from model.clean_text import TextCleaner
 from agents.agent import EMRFormFiller 
@@ -61,12 +62,15 @@ async def analyze_pdfs_endpoint():
         logger.info("Cleaned Data Structure:")
         logger.info(cleaned_data)
 
-        agent = EMRFormFiller()
-        await agent.fill_form({"cleaned_data": cleaned_data})
+        # Run the browser agent in the background (don't wait for it)
+        # This way the user gets the data immediately
+        asyncio.create_task(fill_emr_form_background(cleaned_data))
         
+        # Return immediately without waiting for form filling
         return {
             "num_files_processed": len(all_ocr_text),
-            "cleaned_data": cleaned_data
+            "cleaned_data": cleaned_data,
+            "form_filling_status": "running_in_background"
         }
     except Exception as e:
         logger.error(f"Error in analysis pipeline: {str(e)}")
@@ -74,3 +78,16 @@ async def analyze_pdfs_endpoint():
             status_code=500,
             detail=f"Error processing documents: {str(e)}"
         )
+
+async def fill_emr_form_background(cleaned_data: dict):
+    """
+    Run the EMR form filling in the background without blocking the API response
+    """
+    try:
+        logger.info("Starting background EMR form filling...")
+        agent = EMRFormFiller()
+        await agent.fill_form({"cleaned_data": cleaned_data})
+        logger.info("Background EMR form filling completed successfully!")
+    except Exception as e:
+        logger.error(f"Error in background form filling: {str(e)}")
+        # Don't raise - this is a background task
